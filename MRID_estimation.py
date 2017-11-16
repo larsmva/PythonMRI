@@ -9,13 +9,13 @@ def diff(previous ,current ):
        T1_3D-20082902-101010.mgz   
     """
     import datetime
-    p_string = previous[0:-7].split("-")
-    c_string = current[0:-7].split("-")
+    p_string = previous[0:-5].split("-")
+    c_string = current[0:-5].split("-")
     pdate = datetime.datetime.strptime(p_string[-2]+p_string[-1],'%Y%m%d%H%M%S')
     cdate = datetime.datetime.strptime(c_string[-2]+c_string[-1],'%Y%m%d%H%M%S') 
     dtime = cdate - pdate
 	
-    return  dtime.days*24*3600+ dtime.seconds
+    return  dtime.days*24*3600 + dtime.seconds
 
 
 
@@ -42,22 +42,32 @@ def Highorder_operator(u):
     return Lu
 
 
-def compute_D(folder, segmentation) :
+def MRID_estimate(folder, segmentation,label) :
     import os
     import numpy as np 
 
     import nibabel as nb
     import scipy.optimize as opt 
+
+
+
     files =[] 
+
     segdata = nb.load(segmentation).get_data()
-    label = 1
-    save = os.path.dirname(os.path.dirname(files[0]))+"/D"
+  
+    save = os.path.dirname(Z.folder)+"/DiffusionCoefficent/"
+    
+    if not os.path.isdir(save):
+           os.mkdir(save)
+
     for file in sorted(os.listdir(folder)):
-        if file.endswith("-C.mgz"):
+        if file.endswith(".mgz"):
            files.append(folder+"/"+file)
 
+    vox2ras = nb.load(files[0]).get_header().get_vox2ras()
+
     for no in range(1,len(files)):
-        vox2ras = nb.load(files[no]).get_header().get_vox2ras()
+        
 	u0 =nb.load(files[no-1]).get_data()
 	u1 =nb.load(files[no]).get_data()
 
@@ -67,7 +77,7 @@ def compute_D(folder, segmentation) :
                 
                
                 #Lu =laplace_operator(u1)     
-        Lu = Highorder_operator(u1)
+        Lu = laplace_operator(u0)
         ut[segdata!=label]=0
         Lu[segdata!=label]=0
 
@@ -76,10 +86,10 @@ def compute_D(folder, segmentation) :
         #ut[Lu<0]=0
         #Lu[ut<0]=0
 
-        #dt1=diff(files[no],files[no+1]) 
+        
 
         dt=diff(files[no-1],files[no]) 
-
+        print "tid", dt 
         D = ut/(dt*Lu)
                 
         m  = ut.flatten()
@@ -92,10 +102,23 @@ def compute_D(folder, segmentation) :
         D[np.isnan(D)]=0
         D[np.isinf(D)]=0
 
-        Dcoef=D*1e6
+        Dcoef=D*10**-4
 
         img2 = nb.MGHImage(Dcoef.astype("float32"),vox2ras)
-	                       
-        nb.save(img2,save+os.path.basename(files[0]))
+	            
+        nb.save(img2,save+os.path.basename(files[no]))
+
+
+if __name__ =='__main__':
+	import argparse
+        import os
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--folder',type=str) 
+        parser.add_argument('--seg', type=str) 
+        parser.add_argument('--label',default=1, type=int) 
+        Z = parser.parse_args() 
+
+	MRID_estimate(Z.folder ,Z.seg,Z.label )
+
 
 

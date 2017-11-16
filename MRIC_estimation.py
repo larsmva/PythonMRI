@@ -19,6 +19,8 @@ def MRIC_estimation(k1,k2,G,theta,I):
         G		 Defined exp( -TR*R1)
         theta            The flip angle
         I		 The baseline procentage intensity increase 
+
+        returns          micro Molar , given voxelsize of  1mm^3 then 1 mM corresponds to   1 mm^3 10^-6 mol / 10^6 mm^3 = 10^-12 mol, which amounts to about 602 10^9 particles .
     """
     import numpy as np
     import scipy.optimize as opt
@@ -26,11 +28,12 @@ def MRIC_estimation(k1,k2,G,theta,I):
     aux0 = np.cos(np.deg2rad(theta)) 
     aux1 = 1.-aux0
     aux2 = 1.+aux0
+    x = (k1*aux1 + k2*aux2  + np.sqrt(k1**2*aux1**2 + 2*k1*k2*aux1*aux2 + k2**2*aux1**2)) /(2*k2)
 
     def Ir_GRE(c) : 
-        return (1.-aux0*G)*(1.-G*np.exp(-k1*c))*np.exp(-k2*c)/((1.-aux0*G*np.exp(-k1*c))*(1.-G)
+        return (1.-aux0*G)*(1.-G*np.exp(-k1*c))*np.exp(-k2*c)/((1.-aux0*G*np.exp(-k1*c))*(1.-G))
          
-    x = ( k1*aux1 + k2*aux2  + np.sqrt(k1**2*aux1**2 + 2*k1*k2*aux1*aux2 + k2**2*aux1**2))/(2*k2) # if /aux0
+   # if /aux0
     c_max = np.log(x/G)/k1  	
        
     Im = Ir_GRE(c_max) 
@@ -50,13 +53,13 @@ def MRIC_estimation(k1,k2,G,theta,I):
 
 
 
-def concentration_image(path2mri, path2seg ) :
+def concentration_image(save, path2mri, path2seg ) :
 
     import nibabel as nb
     from nibabel.affines import apply_affine
     import numpy.linalg as npl
     import numpy as np
-    
+    import os
     idata  = nb.load(path2mri).get_data()
 
     vox2ras = nb.load(path2mri).get_header().get_vox2ras()
@@ -84,10 +87,10 @@ def concentration_image(path2mri, path2seg ) :
         if Seg[i] == 0 :
            c[i]=0
         else :
-           c[i] =  mric_brentq(k1,k2,G[Seg[i]-1],theta,I_r[i]/100+1) 
+           c[i] = MRIC_estimation(k1,k2,G[Seg[i]-1],theta,I_r[i]/100+1) 
 
     img2 = nb.MGHImage(c.reshape(idata.shape).astype("float32") ,vox2ras)
-    nb.save(img2,path2mri.split(".")[0]+"-C.mgz")
+    nb.save(img2,save+os.path.basename(path2mri))
    
 
 def concentration_images(folder, path2seg ) :
@@ -95,4 +98,27 @@ def concentration_images(folder, path2seg ) :
     for file in sorted(os.listdir(folder)):
         if file.endswith(".mgz"):
            concentration_image(folder+"/"+file, path2seg ) 
+
+
+if __name__ =='__main__':
+	import argparse
+        import os
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--folder',type=str) 
+        parser.add_argument('--seg', type=str) 
+        Z = parser.parse_args() 
+	
+        save = os.path.dirname(Z.folder)+"/Concentration/"
+        
+        print save
+
+        if not os.path.isdir(save):
+                os.mkdir(save)
+   
+        for file in sorted(os.listdir(Z.folder)):
+                 if file.endswith(".mgz"):
+ 
+                    concentration_image(save, Z.folder+"/"+file, Z.seg)
+
+
   
