@@ -2,26 +2,6 @@
 # -*- coding: utf-8 -*-
 
 
-def write_hdf5( path2mri, meshfile, savefile , space="CG", order=1):
-
-		import dolfin as df
-		mesh = df.Mesh()
-		if mesh.endswith(".xml"):
-		mesh = Mesh(meshfile)
-		elif mesh.endswith(".xdmf"):
-		xdmf = df.XDMFFile(mesh.mpi_comm(),meshfile)
-		xdmf.read(mesh)
-		xdmf.close()
-			 
-		V = df.FunctionSpace(mesh,space,order)
-
-		u = df.Function(V)	    
-
-		u.vector()[:]= MD.get_MRI_values(path2mri,V)	    
-
-		hdf5 = df.HDF5File(mesh.mpi_comm(),save_file+".h5", "w")	    
-		hdf5.write(u,"/"+save_file ) 	    
-		hdf5.close() 	    
 
 
 def neighboor_values( data,i,j,k):
@@ -171,15 +151,18 @@ def get_MRIData(path2mri_file,function_space):
 		from nibabel.affines import apply_affine
 		import numpy.linalg as npl
 		import numpy as np
-
+                import dolfin as df
 
 
                 # If the element is VectorElement then it will be stored as 4D object
-                if isinstance(function_space.ufl_element(),VectorElement)
+                if isinstance(function_space.ufl_element(),df.VectorElement):
                    return get_Vector(path2mri_file,function_space)
 
 		img= nibabel.load(path2mri_file) 
 		inv_aff = npl.inv ( img.get_header().get_vox2ras_tkr() )
+                
+                if  (function_space.ufl_element()._family=='Discontinuous Lagrange'):
+                    print "something"
 
 		data = img.get_data()
 
@@ -193,14 +176,50 @@ def get_MRIData(path2mri_file,function_space):
 			i,j,k = np.rint(apply_affine(inv_aff,xyz).T)
 	
 			values = np.zeros(len(i))
-		        
+		   
 			for n in range(len(i)):
-				values[n]= neighboor_values(data,i[n],j[n],k[n]) 
+				values[n]= data[i[n],j[n],k[n]] 
 	     
 			return values
 
 
+def write_hdf5( path2mri, meshfile, savefile , space="CG", order=1):
 
+		import dolfin as df
+		mesh = df.Mesh()
+		if meshfile.endswith(".xml"):
+		   mesh = df.Mesh(meshfile)
+		elif meshfile.endswith(".xdmf"):
+		   xdmf = df.XDMFFile(mesh.mpi_comm(),meshfile)
+		   xdmf.read(mesh)
+		   xdmf.close()
+			 
+		V = df.FunctionSpace(mesh,space,order)
+
+		u = df.Function(V)	    
+
+		u.vector()[:]= get_MRIData(path2mri,V)	    
+
+		hdf5 = df.HDF5File(mesh.mpi_comm(),savefile+".h5", "w")	    
+		hdf5.write(u,"/"+"kontrast") 	    
+		hdf5.close() 	    
+                df.File(savefile+".pvd") << u
+
+if __name__ =='__main__':
+	import argparse
+        import os
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--folder',type=str) 
+        parser.add_argument('--mesh', type=str) 
+        parser.add_argument('--save', type=str) 
+
+        Z = parser.parse_args() 
+	
+      
+        
+        for file in sorted(os.listdir(Z.folder)):
+                 if file.endswith(".mgz"):
+                    write_hdf5(Z.folder+"/"+file, Z.mesh ,Z.save+"/"+file[0:-4], space="CG", order=1) 
 
 
 
